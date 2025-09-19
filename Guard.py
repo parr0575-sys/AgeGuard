@@ -1,4 +1,4 @@
-# app.py
+# Guard.py
 import streamlit as st
 import cv2
 import tempfile
@@ -9,76 +9,75 @@ from moviepy.editor import VideoFileClip
 st.title("영상 폭력/비폭력 탐지 & 블러링 WebApp")
 
 # -----------------------------
-# 1️⃣ YOLO 모델 로드
+# 1️⃣ 모델 로드
 # -----------------------------
-model = YOLO("yolov8n.pt")  # pretrained COCO 모델
+model = YOLO("yolov8n.pt")  # pretrained COCO
 
-# COCO 클래스 이름
-class_names = {
-    0: "사람",
-    44: "칼"   # knife 클래스가 모델에 포함되어 있으면
-}
+class_names = {0: "사람", 44: "칼"}
 
 # -----------------------------
 # 2️⃣ 사용자 영상 업로드
 # -----------------------------
-uploaded_file = st.file_uploader("영상 선택 (MP4)", type=["mp4"])
+uploaded_file = st.file_uploader("MP4 영상을 선택하세요", type=["mp4"])
+
 if uploaded_file is not None:
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp4") as tmp:
-        tmp.write(uploaded_file.read())
-        tmp_path = tmp.name
+    # 임시 파일로 저장
+    tfile = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
+    tfile.write(uploaded_file.read())
+    video_path = tfile.name
 
-    cap = cv2.VideoCapture(tmp_path)
-    fps = cap.get(cv2.CAP_PROP_FPS)
-    ret, frame = cap.read()
-    h, w = frame.shape[:2]
+    # 출력 임시 파일
+    output_path = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4').name
 
-    # 임시 출력 파일
-    processed_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp4")
-    output_path = processed_file.name
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # H264 코덱 환경에 따라 변경 가능
-    out = cv2.VideoWriter(output_path, fourcc, fps, (w, h))
-
-    frame_count = 0
-    frame_skip = 2  # 속도 최적화
-
-    st.text("영상 처리 중... 잠시만 기다려주세요.")
-    progress_text = st.empty()
-    progress_bar = st.progress(0)
-
-    while ret:
-        if frame_count % frame_skip == 0:
-            results = model(frame)
-            for box, cls, conf in zip(results[0].boxes.xyxy, results[0].boxes.cls, results[0].boxes.conf):
-                cls = int(cls)
-                if cls in class_names and conf > 0.5:
-                    x1, y1, x2, y2 = map(int, box)
-                    label = class_names[cls]
-                    color = (0, 255, 0) if cls == 0 else (0, 0, 255)
-                    # 바운딩 박스
-                    cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                    # 라벨 표시
-                    cv2.putText(frame, f"{label} {conf:.2f}", (x1, y1-10),
-                                cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
-                    # 블러 처리
-                    roi = frame[y1:y2, x1:x2]
-                    blurred_roi = cv2.GaussianBlur(roi, (51, 51), 0)
-                    frame[y1:y2, x1:x2] = blurred_roi
-
-        out.write(frame)
-        frame_count += 1
+    # -----------------------------
+    # 3️⃣ 영상 열기 & VideoWriter 준비
+    # -----------------------------
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        st.error("영상 파일을 열 수 없습니다.")
+    else:
+        fps = cap.get(cv2.CAP_PROP_FPS)
         ret, frame = cap.read()
+        h, w = frame.shape[:2]
+        fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # 임시 cv2 저장
+        out = cv2.VideoWriter(output_path, fourcc, fps, (w, h))
 
-        if frame_count % 10 == 0:
-            progress_text.text(f"처리 프레임: {frame_count}")
-            progress_bar.progress(min(frame_count / 100, 1.0))
+        # -----------------------------
+        # 4️⃣ 프레임 처리
+        # -----------------------------
+        frame_count = 0
+        frame_skip = 2  # 속도 최적화
 
-    cap.release()
-    out.release()
+        while ret:
+            if frame_count % frame_skip == 0:
+                results = model(frame)
+                for box, cls, conf in zip(results[0].boxes.xyxy, results[0].boxes.cls, results[0].boxes.conf):
+                    cls = int(cls)
+                    if cls in class_names and conf > 0.5:
+                        label = class_names[cls]
+                        x1, y1, x2, y2 = map(int, box)
+                        color = (0,255,0) if cls==0 else (0,0,255)
+                        cv2.rectangle(frame, (x1,y1), (x2,y2), color, 2)
+                        cv2.putText(frame, label, (x1, y1-10),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
+                        roi = frame[y1:y2, x1:x2]
+                        blurred_roi = cv2.GaussianBlur(roi, (51,51), 0)
+                        frame[y1:y2, x1:x2] = blurred_roi
 
-    st.success("✅ 영상 처리 완료!")
-    
-    # -----------------------------
-    # 3️⃣ 브라우저에서 재생
-    # -----------------------------
-    st.video(output_path)
+            out.write(frame)
+            frame_count += 1
+            ret, frame = cap.read()
+
+        cap.release()
+        out.release()
+
+        st.info(f"영상 처리 완료! 총 {frame_count} 프레임 처리됨.")
+
+        # -----------------------------
+        # 5️⃣ MoviePy 재인코딩 & 브라우저 재생
+        # -----------------------------
+        clip = VideoFileClip(output_path)
+        final_path = output_path.replace(".mp4","_final.mp4")
+        clip.write_videofile(final_path, codec="libx264", audio_codec="aac")
+
+        st.video(final_path)
