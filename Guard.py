@@ -12,7 +12,7 @@ st.title("영상 폭력/비폭력 탐지 & 블러링 WebApp")
 # 1️⃣ 모델 로드
 # -----------------------------
 model = YOLO("yolov8n.pt")  # pretrained COCO
-class_names = {0: "사람", 44: "칼"}
+class_names = {0: "person", 44: "knife"}  # 영어 자연어 라벨
 
 # -----------------------------
 # 2️⃣ 사용자 영상 업로드
@@ -54,7 +54,7 @@ if uploaded_file is not None:
                         color = (0,255,0) if cls==0 else (0,0,255)
                         cv2.rectangle(frame, (x1,y1), (x2,y2), color, 2)
 
-                        # 2️⃣ 자연어 레이블
+                        # 2️⃣ 자연어 레이블 (영어로)
                         cv2.putText(frame, label, (x1, y1-10),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
 
