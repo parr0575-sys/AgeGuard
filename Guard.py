@@ -6,18 +6,49 @@ import os
 from ultralytics import YOLO
 from moviepy.editor import VideoFileClip
 
-st.title("영상 폭력/비폭력 탐지 & 블러링 WebApp")
+# -----------------------------
+# 🌟 스타일 커스터마이즈 (CSS)
+# -----------------------------
+st.set_page_config(page_title="Violence Detection", page_icon="🛡️", layout="wide")
+
+st.markdown("""
+    <style>
+    .main {
+        background-color: #f9fafb;
+    }
+    .stApp {
+        background: linear-gradient(to right, #f8fafc, #eef2f7);
+    }
+    h1 {
+        text-align: center;
+        color: #1e3a8a;
+        font-family: 'Segoe UI', sans-serif;
+    }
+    .stFileUploader label {
+        font-weight: bold;
+        color: #111827;
+    }
+    </style>
+""", unsafe_allow_html=True)
 
 # -----------------------------
-# 1️⃣ 모델 로드
+# 1️⃣ 타이틀 영역
+# -----------------------------
+st.title("🛡️ 영상 폭력/비폭력 탐지 & 블러링 WebApp")
+st.markdown("#### 업로드한 영상에서 **폭력 장면(칼, 사람)** 을 탐지하고 자동 블러링합니다.")
+
+st.divider()
+
+# -----------------------------
+# 2️⃣ 모델 로드
 # -----------------------------
 model = YOLO("yolov8n.pt")  # pretrained COCO
-class_names = {0: "person", 44: "knife"}  # 영어 자연어 라벨
+class_names = {0: "person", 44: "knife"}  # 라벨 맵핑
 
 # -----------------------------
-# 2️⃣ 사용자 영상 업로드
+# 3️⃣ 사용자 영상 업로드
 # -----------------------------
-uploaded_file = st.file_uploader("MP4 영상을 선택하세요", type=["mp4"])
+uploaded_file = st.file_uploader("📂 MP4 영상을 선택하세요", type=["mp4"])
 
 if uploaded_file is not None:
     tfile = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4')
@@ -25,12 +56,14 @@ if uploaded_file is not None:
     video_path = tfile.name
     output_path = tempfile.NamedTemporaryFile(delete=False, suffix='.mp4').name
 
+    st.info("⏳ 영상 처리 중... 잠시만 기다려주세요.")
+
     # -----------------------------
-    # 3️⃣ 영상 열기 & VideoWriter 준비
+    # 4️⃣ 영상 처리
     # -----------------------------
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
-        st.error("영상 파일을 열 수 없습니다.")
+        st.error("🚨 영상 파일을 열 수 없습니다.")
     else:
         fps = cap.get(cv2.CAP_PROP_FPS)
         ret, frame = cap.read()
@@ -41,6 +74,9 @@ if uploaded_file is not None:
         frame_count = 0
         frame_skip = 2  # 속도 최적화
 
+        progress = st.progress(0, text="프레임 처리 중...")
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+
         while ret:
             if frame_count % frame_skip == 0:
                 results = model(frame)
@@ -50,32 +86,35 @@ if uploaded_file is not None:
                         label = class_names[cls]
                         x1, y1, x2, y2 = map(int, box)
 
-                        # 1️⃣ 바운딩 박스
-                        color = (0,255,0) if cls==0 else (0,0,255)
+                        # 바운딩 박스 + 라벨
+                        color = (0,255,0) if cls==0 else (255,0,0)
                         cv2.rectangle(frame, (x1,y1), (x2,y2), color, 2)
-
-                        # 2️⃣ 자연어 레이블 (영어로)
                         cv2.putText(frame, label, (x1, y1-10),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
 
-                        # 3️⃣ 블러 처리
+                        # 블러 처리
                         roi = frame[y1:y2, x1:x2]
-                        blurred_roi = cv2.GaussianBlur(roi, (51,51), 0)
-                        frame[y1:y2, x1:x2] = blurred_roi
+                        if roi.size > 0:
+                            blurred_roi = cv2.GaussianBlur(roi, (51,51), 0)
+                            frame[y1:y2, x1:x2] = blurred_roi
 
             out.write(frame)
             frame_count += 1
             ret, frame = cap.read()
 
+            # 진행률 업데이트
+            progress.progress(min(frame_count/total_frames, 1.0), text=f"{frame_count}/{total_frames} 프레임 처리")
+
         cap.release()
         out.release()
-        st.info(f"영상 처리 완료! 총 {frame_count} 프레임 처리됨.")
+        st.success(f"✅ 영상 처리 완료! 총 {frame_count} 프레임 분석됨.")
 
         # -----------------------------
-        # 4️⃣ MoviePy 재인코딩 & 브라우저 재생
+        # 5️⃣ 결과 영상 표시
         # -----------------------------
         clip = VideoFileClip(output_path)
         final_path = output_path.replace(".mp4","_final.mp4")
         clip.write_videofile(final_path, codec="libx264", audio_codec="aac")
 
         st.video(final_path)
+        st.download_button("📥 결과 영상 다운로드", data=open(final_path, "rb").read(), file_name="processed_video.mp4")
