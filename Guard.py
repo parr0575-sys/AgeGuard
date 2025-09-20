@@ -7,7 +7,7 @@ from ultralytics import YOLO
 from moviepy.editor import VideoFileClip
 
 # -----------------------------
-# 🌟 스타일 커스터마이즈 (CSS)
+# 🌟 Streamlit UI 스타일
 # -----------------------------
 st.set_page_config(page_title="Violence Detection", page_icon="🛡️", layout="wide")
 
@@ -34,16 +34,16 @@ st.markdown("""
 # -----------------------------
 # 1️⃣ 타이틀 영역
 # -----------------------------
-st.title("🛡️ 영상 폭력/비폭력 탐지 & 블러링 WebApp")
-st.markdown("#### 업로드한 영상에서 **폭력 장면(칼, 사람)** 을 탐지하고 자동 블러링합니다.")
-
+st.title("🛡️ 영상 폭력 탐지 & 블러링 WebApp")
+st.markdown("#### 업로드한 영상에서 **폭력 장면(칼, 총)** 을 탐지하고 자동 블러링합니다.")
 st.divider()
 
 # -----------------------------
-# 2️⃣ 모델 로드
+# 2️⃣ YOLO 모델 로드
 # -----------------------------
-model = YOLO("yolov8n.pt")  # pretrained COCO
-class_names = {0: "person", 44: "knife"}  # 라벨 맵핑
+# 파인튜닝된 칼/총 탐지 모델(.pt) 사용
+model = YOLO("weapon_knife_model.pt")  # 팀원 혹은 코랩에서 생성한 모델
+class_names = {44: "knife", 45: "gun"}  # 필요 시 클래스 번호에 맞춰 수정
 
 # -----------------------------
 # 3️⃣ 사용자 영상 업로드
@@ -73,9 +73,8 @@ if uploaded_file is not None:
 
         frame_count = 0
         frame_skip = 2  # 속도 최적화
-
-        progress = st.progress(0, text="프레임 처리 중...")
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        progress = st.progress(0, text="프레임 처리 중...")
 
         while ret:
             if frame_count % frame_skip == 0:
@@ -87,15 +86,15 @@ if uploaded_file is not None:
                         x1, y1, x2, y2 = map(int, box)
 
                         # 바운딩 박스 + 라벨
-                        color = (0,255,0) if cls==0 else (255,0,0)
-                        cv2.rectangle(frame, (x1,y1), (x2,y2), color, 2)
-                        cv2.putText(frame, label, (x1, y1-10),
+                        color = (0, 0, 255)  # 빨간색 강조
+                        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
+                        cv2.putText(frame, label, (x1, y1 - 10),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
 
                         # 블러 처리
                         roi = frame[y1:y2, x1:x2]
                         if roi.size > 0:
-                            blurred_roi = cv2.GaussianBlur(roi, (51,51), 0)
+                            blurred_roi = cv2.GaussianBlur(roi, (51, 51), 0)
                             frame[y1:y2, x1:x2] = blurred_roi
 
             out.write(frame)
@@ -103,7 +102,7 @@ if uploaded_file is not None:
             ret, frame = cap.read()
 
             # 진행률 업데이트
-            progress.progress(min(frame_count/total_frames, 1.0), text=f"{frame_count}/{total_frames} 프레임 처리")
+            progress.progress(min(frame_count / total_frames, 1.0), text=f"{frame_count}/{total_frames} 프레임 처리")
 
         cap.release()
         out.release()
@@ -113,7 +112,7 @@ if uploaded_file is not None:
         # 5️⃣ 결과 영상 표시
         # -----------------------------
         clip = VideoFileClip(output_path)
-        final_path = output_path.replace(".mp4","_final.mp4")
+        final_path = output_path.replace(".mp4", "_final.mp4")
         clip.write_videofile(final_path, codec="libx264", audio_codec="aac")
 
         st.video(final_path)
