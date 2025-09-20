@@ -35,7 +35,13 @@ st.markdown("""
 # 1️⃣ 타이틀 영역
 # -----------------------------
 st.title("🛡️ 영상 폭력/비폭력 탐지 & 블러링 WebApp")
-st.markdown("#### 업로드한 영상에서 **폭력 장면(칼, 사람)** 을 탐지하고 자동 블러링합니다.")
+
+st.markdown("""
+<div style='text-align: center; font-size: 18px;'>
+    업로드한 영상에서 <b>폭력 장면(칼, 총)</b> 을 탐지하고 자동 블러링합니다.
+</div>
+""", unsafe_allow_html=True)
+
 
 st.divider()
 
@@ -118,3 +124,4 @@ if uploaded_file is not None:
 
         st.video(final_path)
         st.download_button("📥 결과 영상 다운로드", data=open(final_path, "rb").read(), file_name="processed_video.mp4")
+
