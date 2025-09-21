@@ -35,23 +35,15 @@ st.markdown("""
 # 1️⃣ 타이틀 영역
 # -----------------------------
 st.title("🛡️ 영상 폭력/비폭력 탐지 & 블러링 WebApp")
-
-st.markdown("""
-<div style='text-align: center; font-size: 18px;'>
-    업로드한 영상에서 <b>폭력 장면(칼, 총)</b> 을 탐지하고 자동 블러링합니다.
-</div>
-""", unsafe_allow_html=True)
+st.markdown("#### 업로드한 영상에서 **폭력 장면(칼, 사람)** 을 탐지하고 자동 블러링합니다.")
 
 st.divider()
 
 # -----------------------------
-# 2️⃣ 모델 로드 (커스텀 YOLO)
+# 2️⃣ 모델 로드
 # -----------------------------
-# ⚠️ yolo11n.pt 파일이 Guard.py와 같은 경로에 있어야 함
-model = YOLO("yolo11n.pt")  
-
-# 현재는 knife만 학습 → 나중에 총(gun) 추가 학습 시 {0: "knife", 1: "gun"} 으로 확장
-class_names = {0: "knife"}  
+model = YOLO("yolov8n.pt")  # pretrained COCO
+class_names = {0: "person", 44: "knife"}  # 라벨 맵핑
 
 # -----------------------------
 # 3️⃣ 사용자 영상 업로드
@@ -95,15 +87,15 @@ if uploaded_file is not None:
                         x1, y1, x2, y2 = map(int, box)
 
                         # 바운딩 박스 + 라벨
-                        color = (255, 0, 0)  # 빨간색 (칼)
-                        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-                        cv2.putText(frame, label, (x1, y1 - 10),
+                        color = (0,255,0) if cls==0 else (255,0,0)
+                        cv2.rectangle(frame, (x1,y1), (x2,y2), color, 2)
+                        cv2.putText(frame, label, (x1, y1-10),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.9, color, 2)
 
                         # 블러 처리
                         roi = frame[y1:y2, x1:x2]
                         if roi.size > 0:
-                            blurred_roi = cv2.GaussianBlur(roi, (51, 51), 0)
+                            blurred_roi = cv2.GaussianBlur(roi, (51,51), 0)
                             frame[y1:y2, x1:x2] = blurred_roi
 
             out.write(frame)
@@ -111,7 +103,7 @@ if uploaded_file is not None:
             ret, frame = cap.read()
 
             # 진행률 업데이트
-            progress.progress(min(frame_count / total_frames, 1.0), text=f"{frame_count}/{total_frames} 프레임 처리")
+            progress.progress(min(frame_count/total_frames, 1.0), text=f"{frame_count}/{total_frames} 프레임 처리")
 
         cap.release()
         out.release()
@@ -121,9 +113,8 @@ if uploaded_file is not None:
         # 5️⃣ 결과 영상 표시
         # -----------------------------
         clip = VideoFileClip(output_path)
-        final_path = output_path.replace(".mp4", "_final.mp4")
+        final_path = output_path.replace(".mp4","_final.mp4")
         clip.write_videofile(final_path, codec="libx264", audio_codec="aac")
 
         st.video(final_path)
-        st.download_button("📥 결과 영상 다운로드", data=open(final_path, "rb").read(),
-                           file_name="processed_video.mp4")
+        st.download_button("📥 결과 영상 다운로드", data=open(final_path, "rb").read(), file_name="processed_video.mp4")
